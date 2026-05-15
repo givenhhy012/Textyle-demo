@@ -60,7 +60,9 @@ AI_SEARCH_THRESHOLD=0.15
 
 **`Textyle-app/.env` 파일 생성:**
 ```env
-# Textyle-vectorserver/.env 에 넣어준 값들과 동일하게 생성.
+# EXPO_PUBLIC_SUPABASE_URL= {값은 벡터서버와 동일}
+EXPO_PUBLIC_SUPABASE_ANON_KEY=
+
 ```
 
 #### 1.4 IP 주소 확인 및 변경
