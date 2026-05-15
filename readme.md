@@ -27,6 +27,8 @@ Textyle-demo/
 
 ### 1️⃣ 사전 준비 (한 번만)
 
+(참고사항: 데이터 적재는 test.py 이용했음)
+
 #### 1.1 Python 의존성 설치
 ```powershell
 cd Textyle-vectorserver
