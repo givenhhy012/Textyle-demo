@@ -15,11 +15,29 @@ export default function TabLayout() {
         name="index"
         options={{
           title: '검색',
-          tabBarIcon: ({ color, focused }) => 
+          tabBarIcon: ({ color, focused }) =>
             <Ionicons name={focused ? "search" : "search-outline"} size={26} color={color} />,
         }}
       />
-      
+
+      <Tabs.Screen
+        name="ai_search"
+        options={{
+          title: 'AI 검색',
+          tabBarIcon: ({ color, focused }) =>
+            <Ionicons name={focused ? "sparkles" : "sparkles-outline"} size={26} color={color} />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="precision_search"
+        options={{
+          title: 'AI 정밀검색',
+          tabBarIcon: ({ color, focused }) =>
+            <Ionicons name={focused ? "scan" : "scan-outline"} size={26} color={color} />,
+        }}
+      />
+
       <Tabs.Screen
         name="bookmarks"
         options={{

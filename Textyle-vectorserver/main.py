@@ -4,7 +4,8 @@ from PIL import Image
 import io
 import os
 import torch
-from transformers import CLIPProcessor, CLIPModel
+# 🔥 transformers의 meta-tensor 버그 우회를 위해 open_clip 직접 사용 (test.py와 동일)
+import open_clip
 from dotenv import load_dotenv
 import traceback
 from deep_translator import GoogleTranslator
@@ -31,11 +32,14 @@ app = FastAPI(title="TexTyle Vector Search Server")
 
 # 2. AI 모델 초기화 (서버 켜질 때 한 번만 로드)
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model_id = "openai/clip-vit-base-patch32"
+# open_clip 전용 모델 주소 (앞에 hf-hub: 가 붙어야 함)
+model_id = "hf-hub:Marqo/marqo-fashionSigLIP"
 print(f"AI 모델 로딩 중... (Device: {device})")
 
-model = CLIPModel.from_pretrained(model_id).to(device)
-processor = CLIPProcessor.from_pretrained(model_id)
+model, _, preprocess = open_clip.create_model_and_transforms(model_id)
+model = model.to(device)
+model.eval()
+tokenizer = open_clip.get_tokenizer(model_id)
 print("AI 모델 로딩 완료!")
 
 #  DB 카테고리 구조 매핑 (실제 sub_category 값 기준)
@@ -107,7 +111,7 @@ CATEGORY_KEYWORDS = {
     }
 
     # ------------------------------------------------------------------ #
-    #  CLIP zero-shot 레이블 → (main_category, sub_category)
+    #  fashionSigLIP zero-shot 레이블 → (main_category, sub_category)
     # ------------------------------------------------------------------ #
 CLIP_LABEL_TO_CATEGORY = {
         # 상의
@@ -150,25 +154,25 @@ def extract_category_from_query(query: str):
 
 
 # ------------------------------------------------------------------ #
-#  ① CLIP zero-shot으로 이미지 카테고리 분류
+#  ① fashionSigLIP zero-shot으로 이미지 카테고리 분류
 # ------------------------------------------------------------------ #
-def classify_clothing_type(image_obj, processor, model, device):
-    inputs = processor(
-        text=CLIP_LABELS,
-        images=image_obj,
-        return_tensors="pt",
-        padding=True
-    ).to(device)
+def classify_clothing_type(image_obj, model, preprocess, tokenizer, device):
+    # open_clip 방식: preprocess로 이미지 텐서 변환, tokenizer로 텍스트 토큰 변환
+    image_tensor = preprocess(image_obj).unsqueeze(0).to(device)
+    text_tokens = tokenizer(CLIP_LABELS).to(device)
 
     with torch.no_grad():
-        outputs = model(**inputs)
-        probs = outputs.logits_per_image.softmax(dim=1)
+        image_features = model.encode_image(image_tensor, normalize=True)
+        text_features = model.encode_text(text_tokens, normalize=True)
+        # 코사인 유사도 계산 (정규화 완료 상태이므로 내적 = 코사인 유사도)
+        similarities = (image_features @ text_features.T).squeeze()
+        probs = similarities.softmax(dim=0)
 
     best_idx = probs.argmax().item()
-    clip_label = CLIP_LABELS[best_idx]
-    main_cat, sub_cat = CLIP_LABEL_TO_CATEGORY[clip_label]
+    best_label = CLIP_LABELS[best_idx]
+    main_cat, sub_cat = CLIP_LABEL_TO_CATEGORY[best_label]
 
-    print(f"🤖 CLIP 분류 결과: {clip_label} → main: {main_cat}, sub: {sub_cat}")
+    print(f"🤖 fashionSigLIP 분류 결과: {best_label} → main: {main_cat}, sub: {sub_cat}")
     return main_cat, sub_cat
 
 # 3. 검색 API 엔드포인트
@@ -198,7 +202,7 @@ async def search_clothes(
         # ✅ 2. 카테고리 결정
         main_category, sub_category = extract_category_from_query(query)
         if main_category is None:
-            main_category, sub_category = classify_clothing_type(image_obj, processor, model, device)
+            main_category, sub_category = classify_clothing_type(image_obj, model, preprocess, tokenizer, device)
 
         print(f"🏷️ 카테고리: main={main_category}, sub={sub_category}")
 
@@ -237,27 +241,22 @@ async def search_clothes(
 
         print(f"✨ 최종 AI 입력 텍스트: '{enhanced_query}'")
 
-        # 4. 모델 입력 및 임베딩 추출
+        # 4. 모델 입력 및 임베딩 추출 (768차원) - open_clip API 사용
         with torch.no_grad():
-            # 텍스트 임베딩 (512차원)
-            text_inputs = processor(text=[enhanced_query], return_tensors="pt", padding=True).to(device)
-            text_outputs = model.get_text_features(**text_inputs)
-            text_features = text_outputs.pooler_output if hasattr(text_outputs, 'pooler_output') else text_outputs
+            # 텍스트 임베딩
+            text_tokens = tokenizer([enhanced_query]).to(device)
+            text_features = model.encode_text(text_tokens, normalize=True)
 
-            # 이미지 임베딩 (512차원)
-            image_inputs = processor(images=image_obj, return_tensors="pt").to(device)
-            image_outputs = model.get_image_features(**image_inputs)
-            image_features = image_outputs.pooler_output if hasattr(image_outputs, 'pooler_output') else image_outputs
-            # 정규화
-            text_features = F.normalize(text_features, p=2, dim=-1)
-            image_features = F.normalize(image_features, p=2, dim=-1)
+            # 이미지 임베딩
+            image_tensor = preprocess(image_obj).unsqueeze(0).to(device)
+            image_features = model.encode_image(image_tensor, normalize=True)
 
             # 가중치 적용
             if text_weight == 0.0:
                 embedding = image_features
             else:
                 embedding = (image_features * image_weight) + (text_features * text_weight)
-                embedding = F.normalize(embedding, p=2, dim=-1)  # ← .norm() 대신 F.normalize로 통일
+                embedding = F.normalize(embedding, p=2, dim=-1)
 
             query_embedding_list = embedding.squeeze().tolist()
 
