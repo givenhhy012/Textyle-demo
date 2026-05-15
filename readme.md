@@ -50,7 +50,7 @@ npm install
 SUPABASE_URL= {붙여넣기}
 SUPABASE_KEY= {붙여넣기}
 GEMINI_API_KEY= {gemini ai studio에서 키 발급받아 사용}
-GEMINI_MODEL_NAME=gemini-2.5-flash
+GEMINI_MODEL_NAME=gemini-3.1-flash-lite
 
 # 선택사항 (기본값이 있음):
 STAGE1_COUNT=200
@@ -60,8 +60,11 @@ AI_SEARCH_THRESHOLD=0.15
 
 **`Textyle-app/.env` 파일 생성:**
 ```env
-# EXPO_PUBLIC_SUPABASE_URL= {값은 벡터서버와 동일}
+EXPO_PUBLIC_SUPABASE_URL= {값은 벡터서버와 동일}
 EXPO_PUBLIC_SUPABASE_ANON_KEY=
+
+GEMINI_API_KEY=
+GEMINI_MODEL_NAME=gemini-3.1-flash-lite
 
 ```
 
